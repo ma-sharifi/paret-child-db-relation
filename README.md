@@ -1,30 +1,64 @@
 # Parent-Child DB Relation
 
-Spring Boot REST API demonstrating JPA joined-table inheritance with Oracle DB.  
-Three entities share a `parent` table — `Parent`, `Child1` (adds `family`), and `Child2` (adds `age`).
+A Spring Boot REST API demonstrating **JPA Joined-Table inheritance** with Oracle DB, MapStruct, and Lombok.
 
-## Prerequisites
-
-| Tool | Version |
-|------|---------|
-| Docker | any recent version |
-| Java 17 | local run only |
-| Maven 3.x | local run only |
-| Node.js / npm | Bruno CLI local run only |
+Three entity types — `Parent`, `Child1`, `Child2` — share a common `PARENT` table. Each child type has its own table that holds only its extra columns and joins back to `PARENT` via a foreign key.
 
 ---
 
-## Option A — Docker Compose (recommended)
+## Tech Stack
 
-Everything runs in containers: Oracle XE, the Spring Boot app, and optionally Bruno for testing.
+| Layer | Technology |
+|-------|-----------|
+| Language | Java 17 |
+| Framework | Spring Boot 3.3.5 |
+| Persistence | Spring Data JPA / Hibernate |
+| Database | Oracle XE 21c |
+| Mapping | MapStruct 1.5.5 + Lombok 1.18.30 |
+| Containerisation | Docker / Docker Compose |
+| API Testing | Bruno CLI 3.x |
 
-### Start the infrastructure (Oracle + App)
+---
+
+## Data Model
+
+### Inheritance strategy: `JOINED`
+
+```
+PARENT table
+┌────┬──────────────┬──────┬────────────┐
+│ ID │ NAME (NOT NULL) │ DTYPE │            │
+├────┼──────────────┼──────┤            │
+│  1 │ Alice         │      │  plain Parent │
+│  2 │ Bob           │CHILD1│  → CHILD1  │
+│  3 │ Carol         │CHILD2│  → CHILD2  │
+└────┴──────────────┴──────┘
+
+CHILD1 table          CHILD2 table
+┌───────────┬────────┐  ┌───────────┬─────┐
+│ PARENT_ID │ FAMILY │  │ PARENT_ID │ AGE │
+├───────────┼────────┤  ├───────────┼─────┤
+│     2     │ Smith  │  │     3     │  30 │
+└───────────┴────────┘  └───────────┴─────┘
+```
+
+- `DTYPE` is a discriminator column (`STRING`) on the `PARENT` table.
+- Child tables reference `PARENT` via `PARENT_ID` (FK + PK).
+- The `PARENT_SEQ` Oracle sequence drives ID generation.
+
+---
+
+## Quick Start — Docker Compose
+
+Everything runs in containers. No local Java or Node installation needed.
+
+### Start infrastructure (Oracle + App)
 
 ```bash
 docker-compose up
 ```
 
-Oracle takes ~2 minutes to initialise on first run. The app waits for Oracle to be healthy before starting.
+Oracle XE takes ~2 minutes to initialise on the first run. The app waits for Oracle to pass its health check before starting.
 
 ### Run the full test pipeline
 
@@ -32,7 +66,7 @@ Oracle takes ~2 minutes to initialise on first run. The app waits for Oracle to 
 docker-compose --profile test up --abort-on-container-exit --exit-code-from bruno
 ```
 
-This starts Oracle → App → Bruno in order, runs all 15 API tests, then stops everything. The exit code mirrors Bruno's result (`0` = all passed).
+Starts Oracle → App → Bruno in dependency order, runs all 15 API tests, then tears down. Exit code is `0` on pass, non-zero on failure — suitable for CI.
 
 ### Stop and clean up
 
@@ -42,9 +76,16 @@ docker-compose down
 
 ---
 
-## Option B — Run locally
+## Local Development
 
-### 1. Start Oracle XE via Docker
+### Prerequisites
+
+- Java 17 (MapStruct 1.5.x is incompatible with JDK 21+)
+- Maven 3.x
+- Docker (for Oracle XE)
+- Node.js / npm (for Bruno CLI)
+
+### 1 — Start Oracle XE
 
 ```bash
 docker run -d \
@@ -56,81 +97,112 @@ docker run -d \
   gvenzl/oracle-xe:21-slim
 ```
 
-Wait until the DB is ready:
+Wait until ready:
 
 ```bash
 docker logs -f oracle-xe | grep "DATABASE IS READY"
 ```
 
-### 2. Start the Spring Boot App
-
-> **Important:** Use Java 17. MapStruct 1.5.x is incompatible with JDK 21+.
+### 2 — Start the app
 
 ```bash
-JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.0.2.jdk/Contents/Home \
+JAVA_HOME=$(/usr/libexec/java_home -v 17) \
   mvn spring-boot:run -DskipTests
 ```
 
-The app starts on **http://localhost:8080**.  
-Hibernate auto-creates the schema (`ddl-auto=update`) on first run.
+The app starts on **http://localhost:8080**. Hibernate auto-creates the schema on first run (`ddl-auto=update`).
 
-### 3. Run Bruno tests locally
+### 3 — Run Bruno tests
 
 ```bash
 npm install -g @usebruno/cli
-
 cd bruno-collection
-bru run --env local          # all 15 requests
-bru run parents --env local  # only parent requests
+bru run --env local
 ```
 
 ---
 
-## API Endpoints
+## API Reference
 
-| Resource | Base Path |
-|----------|-----------|
-| Parent   | `/api/parents` |
-| Child1   | `/api/child1s` |
-| Child2   | `/api/child2s` |
+All three resources expose the same five operations:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET    | `/api/{resource}` | List all |
-| GET    | `/api/{resource}/{id}` | Get by ID |
-| POST   | `/api/{resource}` | Create |
-| PUT    | `/api/{resource}/{id}` | Update |
-| DELETE | `/api/{resource}/{id}` | Delete |
+| Method | Path | Status | Description |
+|--------|------|--------|-------------|
+| `GET` | `/api/{resource}` | 200 | List all |
+| `GET` | `/api/{resource}/{id}` | 200 / 404 | Get by ID |
+| `POST` | `/api/{resource}` | 201 | Create |
+| `PUT` | `/api/{resource}/{id}` | 200 / 404 | Update |
+| `DELETE` | `/api/{resource}/{id}` | 204 / 404 | Delete |
 
-### Example payloads
+Resources: `parents`, `child1s`, `child2s`
 
-**Parent** — `POST /api/parents`
+### Request / Response bodies
+
+**Parent**
 ```json
+// POST /api/parents
 { "name": "Alice" }
+
+// Response
+{ "id": 1, "name": "Alice" }
 ```
 
-**Child1** — `POST /api/child1s`
+**Child1** (inherits `id`, `name`; adds `family`)
 ```json
+// POST /api/child1s
 { "name": "Bob", "family": "Smith" }
+
+// Response
+{ "id": 2, "name": "Bob", "family": "Smith" }
 ```
 
-**Child2** — `POST /api/child2s`
+**Child2** (inherits `id`, `name`; adds `age`)
 ```json
+// POST /api/child2s
 { "name": "Carol", "age": 30 }
+
+// Response
+{ "id": 3, "name": "Carol", "age": 30 }
+```
+
+### Error response
+
+```json
+{
+  "timestamp": "2026-06-11T10:00:00.000",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Child1 with id 99 not found"
+}
 ```
 
 ---
 
-## Bruno collection
+## Bruno Collection
 
-The collection lives in `bruno-collection/` with two environments:
+The collection at `bruno-collection/` covers all 15 endpoints (5 per resource).
 
-| Environment | `baseUrl` | Usage |
-|-------------|-----------|-------|
-| `local` | `http://localhost:8080` | local Maven run |
-| `docker` | `http://app:8080` | Docker Compose pipeline |
+### Environments
 
-The `create-*.bru` requests capture the returned `id` into `{{parentId}}` / `{{child1Id}}` / `{{child2Id}}` via `script:post-response`, so update and delete always use the ID from that run — no manual state management needed.
+| Environment | `baseUrl` | Use when |
+|-------------|-----------|----------|
+| `local` | `http://localhost:8080` | Running app via Maven locally |
+| `docker` | `http://app:8080` | Running inside Docker Compose |
+
+### Running
+
+```bash
+cd bruno-collection
+
+bru run --env local                  # all resources
+bru run parents --env local          # one resource only
+bru run child1s --env local
+bru run child2s --env local
+```
+
+### How IDs are managed
+
+The `create-*.bru` requests include a `script:post-response` block that captures the returned `id` into a runtime variable (`{{parentId}}`, `{{child1Id}}`, `{{child2Id}}`). The subsequent get-by-id, update, and delete requests in the same run use these variables automatically — no manual state management needed.
 
 ---
 
@@ -138,24 +210,29 @@ The `create-*.bru` requests capture the returned `id` into `{{parentId}}` / `{{c
 
 ```
 .
-├── Dockerfile                   # Multi-stage build (Maven 3.9 + JRE 17 Alpine)
-├── docker-compose.yml           # oracle + app (default) + bruno (--profile test)
-├── src/main/java/com/example/parentchilddbrelation/
-│   ├── controller/              # REST controllers
-│   ├── dto/                     # DTOs
-│   ├── entity/                  # JPA entities (joined-table inheritance)
-│   ├── mapper/                  # MapStruct mappers
-│   ├── repository/              # Spring Data JPA repositories
-│   ├── service/                 # Business logic
-│   └── exception/               # GlobalExceptionHandler, EntityNotFoundException
+├── Dockerfile                        # Multi-stage: Maven build → JRE 17 Alpine runtime
+├── docker-compose.yml                # oracle + app (default) · bruno (--profile test)
+├── .dockerignore
+├── pom.xml
+├── src/main/
+│   ├── resources/application.properties
+│   └── java/com/example/parentchilddbrelation/
+│       ├── ParentChildDbRelationApplication.java
+│       ├── controller/               # ParentController, Child1Controller, Child2Controller
+│       ├── dto/                      # ParentDto, Child1Dto, Child2Dto
+│       ├── entity/                   # Parent, Child1, Child2  (JOINED inheritance)
+│       ├── mapper/                   # BaseMapper<E,D> · per-entity overrides (id ignored on update)
+│       ├── repository/               # Spring Data JPA repositories
+│       ├── service/                  # Transactional service layer
+│       └── exception/                # EntityNotFoundException · GlobalExceptionHandler
 └── bruno-collection/
-    ├── Dockerfile               # node:20-alpine + @usebruno/cli
-    ├── entrypoint.sh            # waits for app, then runs bru
+    ├── Dockerfile                    # node:20-alpine + @usebruno/cli
+    ├── entrypoint.sh                 # polls app readiness, then runs bru
     ├── bruno.json
     ├── environments/
     │   ├── local.bru
     │   └── docker.bru
-    ├── parents/                 # 5 requests
-    ├── child1s/                 # 5 requests
-    └── child2s/                 # 5 requests
+    ├── parents/                      # get-all · get-by-id · create · update · delete
+    ├── child1s/
+    └── child2s/
 ```
