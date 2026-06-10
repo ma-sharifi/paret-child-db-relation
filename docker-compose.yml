@@ -10,15 +10,10 @@ services:
     ports:
       - "1521:1521"
     healthcheck:
-      test:
-        - CMD-SHELL
-        - |
-          echo 'SELECT 1 FROM DUAL;' |
-          /opt/oracle/product/21c/dbhomeXE/bin/sqlplus -s appuser/apppassword@localhost:1521/XEPDB1 |
-          grep -q '1'
-      interval: 30s
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | /opt/oracle/product/21c/dbhomeXE/bin/sqlplus -s appuser/apppassword@localhost:1521/XEPDB1 2>&1 | grep -qE '^\\s+1$'"]
+      interval: 15s
       timeout: 10s
-      retries: 20
+      retries: 30
       start_period: 120s
 
   app:
@@ -31,6 +26,7 @@ services:
     depends_on:
       oracle:
         condition: service_healthy
+    restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/parents"]
       interval: 10s
