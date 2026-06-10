@@ -1,0 +1,21 @@
+meta {
+  name: Update Parent
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/parents/{{parentId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Alice Updated"
+  }
+}

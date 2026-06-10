@@ -1,0 +1,11 @@
+meta {
+  name: Delete Child1
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/child1s/{{child1Id}}
+  body: none
+  auth: none
+}

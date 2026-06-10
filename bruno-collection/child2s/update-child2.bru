@@ -1,0 +1,22 @@
+meta {
+  name: Update Child2
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/child2s/{{child2Id}}
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Carol Updated",
+    "age": 35
+  }
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Create Parent
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/parents
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Alice"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("parentId", res.getBody().id);
+  }
+}

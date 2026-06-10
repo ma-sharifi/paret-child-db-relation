@@ -1,0 +1,28 @@
+meta {
+  name: Create Child1
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/child1s
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Bob",
+    "family": "Smith"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("child1Id", res.getBody().id);
+  }
+}

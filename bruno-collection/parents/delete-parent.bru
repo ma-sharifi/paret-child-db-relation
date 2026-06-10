@@ -1,0 +1,11 @@
+meta {
+  name: Delete Parent
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/parents/{{parentId}}
+  body: none
+  auth: none
+}

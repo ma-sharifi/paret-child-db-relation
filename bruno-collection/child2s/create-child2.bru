@@ -1,0 +1,28 @@
+meta {
+  name: Create Child2
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/child2s
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Carol",
+    "age": 30
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("child2Id", res.getBody().id);
+  }
+}
