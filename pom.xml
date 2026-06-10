@@ -12,9 +12,9 @@
     </parent>
 
     <groupId>com.example</groupId>
-    <artifactId>paret-child-db-relation</artifactId>
+    <artifactId>parent-child-db-relation</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>paret-child-db-relation</name>
+    <name>parent-child-db-relation</name>
     <description>Spring Boot Parent-Child JPA inheritance with Oracle DB and MapStruct</description>
 
     <properties>
