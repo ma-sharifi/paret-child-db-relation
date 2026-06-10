@@ -1,0 +1,50 @@
+services:
+
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: oracle-xe
+    environment:
+      ORACLE_PASSWORD: Oracle123
+      APP_USER: appuser
+      APP_USER_PASSWORD: apppassword
+    ports:
+      - "1521:1521"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          echo 'SELECT 1 FROM DUAL;' |
+          /opt/oracle/product/21c/dbhomeXE/bin/sqlplus -s appuser/apppassword@localhost:1521/XEPDB1 |
+          grep -q '1'
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+  app:
+    build: .
+    container_name: parent-child-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@oracle:1521/XEPDB1
+    depends_on:
+      oracle:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/parents"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  bruno:
+    build:
+      context: ./bruno-collection
+      dockerfile: Dockerfile
+    container_name: bruno-tests
+    depends_on:
+      app:
+        condition: service_healthy
+    profiles:
+      - test

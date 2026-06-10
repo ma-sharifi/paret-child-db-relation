@@ -7,14 +7,42 @@ Three entities share a `parent` table — `Parent`, `Child1` (adds `family`), an
 
 | Tool | Version |
 |------|---------|
-| Java | 17 |
-| Maven | 3.x |
 | Docker | any recent version |
-| Node.js / npm | for Bruno CLI |
+| Java 17 | local run only |
+| Maven 3.x | local run only |
+| Node.js / npm | Bruno CLI local run only |
 
 ---
 
-## Running the Project
+## Option A — Docker Compose (recommended)
+
+Everything runs in containers: Oracle XE, the Spring Boot app, and optionally Bruno for testing.
+
+### Start the infrastructure (Oracle + App)
+
+```bash
+docker-compose up
+```
+
+Oracle takes ~2 minutes to initialise on first run. The app waits for Oracle to be healthy before starting.
+
+### Run the full test pipeline
+
+```bash
+docker-compose --profile test up --abort-on-container-exit --exit-code-from bruno
+```
+
+This starts Oracle → App → Bruno in order, runs all 15 API tests, then stops everything. The exit code mirrors Bruno's result (`0` = all passed).
+
+### Stop and clean up
+
+```bash
+docker-compose down
+```
+
+---
+
+## Option B — Run locally
 
 ### 1. Start Oracle XE via Docker
 
@@ -28,7 +56,7 @@ docker run -d \
   gvenzl/oracle-xe:21-slim
 ```
 
-Wait until the DB is ready (check logs):
+Wait until the DB is ready:
 
 ```bash
 docker logs -f oracle-xe | grep "DATABASE IS READY"
@@ -44,19 +72,21 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.0.2.jdk/Contents/Home \
 ```
 
 The app starts on **http://localhost:8080**.  
-Hibernate will auto-create the schema (`ddl-auto=update`) on first run.
+Hibernate auto-creates the schema (`ddl-auto=update`) on first run.
 
-### 3. Verify
+### 3. Run Bruno tests locally
 
 ```bash
-curl http://localhost:8080/api/parents
+npm install -g @usebruno/cli
+
+cd bruno-collection
+bru run --env local          # all 15 requests
+bru run parents --env local  # only parent requests
 ```
 
 ---
 
 ## API Endpoints
-
-All endpoints follow the same CRUD pattern for three resources:
 
 | Resource | Base Path |
 |----------|-----------|
@@ -91,60 +121,41 @@ All endpoints follow the same CRUD pattern for three resources:
 
 ---
 
-## Running the Bruno Collection
+## Bruno collection
 
-[Bruno](https://www.usebruno.com/) is a Git-friendly API client. The collection lives in `bruno-collection/`.
+The collection lives in `bruno-collection/` with two environments:
 
-### Install Bruno CLI
+| Environment | `baseUrl` | Usage |
+|-------------|-----------|-------|
+| `local` | `http://localhost:8080` | local Maven run |
+| `docker` | `http://app:8080` | Docker Compose pipeline |
 
-```bash
-npm install -g @usebruno/cli
-```
-
-### Run all requests
-
-```bash
-cd bruno-collection
-bru run --env local
-```
-
-### Run a single folder
-
-```bash
-bru run parents --env local
-bru run child1s --env local
-bru run child2s --env local
-```
-
-### Environment variables (`environments/local.bru`)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `baseUrl` | `http://localhost:8080` | API base URL |
-| `parentId` | `1` | Used by get-by-id before a create; auto-updated after create |
-| `child1Id` | `1` | Same as above |
-| `child2Id` | `1` | Same as above |
-
-The `create-*.bru` requests use a `script:post-response` block to capture the newly created ID into the matching variable automatically, so update and delete always use the correct ID from the same run.
+The `create-*.bru` requests capture the returned `id` into `{{parentId}}` / `{{child1Id}}` / `{{child2Id}}` via `script:post-response`, so update and delete always use the ID from that run — no manual state management needed.
 
 ---
 
 ## Project Structure
 
 ```
-src/main/java/com/example/parentchilddbrelation/
-├── controller/      # REST controllers (ParentController, Child1Controller, Child2Controller)
-├── dto/             # DTOs (ParentDto, Child1Dto, Child2Dto)
-├── entity/          # JPA entities with joined-table inheritance
-├── mapper/          # MapStruct mappers (BaseMapper + per-entity overrides)
-├── repository/      # Spring Data JPA repositories
-├── service/         # Business logic
-└── exception/       # GlobalExceptionHandler, EntityNotFoundException
-
-bruno-collection/
-├── bruno.json
-├── environments/local.bru
-├── parents/         # 5 requests: get-all, get-by-id, create, update, delete
-├── child1s/         # 5 requests
-└── child2s/         # 5 requests
+.
+├── Dockerfile                   # Multi-stage build (Maven 3.9 + JRE 17 Alpine)
+├── docker-compose.yml           # oracle + app (default) + bruno (--profile test)
+├── src/main/java/com/example/parentchilddbrelation/
+│   ├── controller/              # REST controllers
+│   ├── dto/                     # DTOs
+│   ├── entity/                  # JPA entities (joined-table inheritance)
+│   ├── mapper/                  # MapStruct mappers
+│   ├── repository/              # Spring Data JPA repositories
+│   ├── service/                 # Business logic
+│   └── exception/               # GlobalExceptionHandler, EntityNotFoundException
+└── bruno-collection/
+    ├── Dockerfile               # node:20-alpine + @usebruno/cli
+    ├── entrypoint.sh            # waits for app, then runs bru
+    ├── bruno.json
+    ├── environments/
+    │   ├── local.bru
+    │   └── docker.bru
+    ├── parents/                 # 5 requests
+    ├── child1s/                 # 5 requests
+    └── child2s/                 # 5 requests
 ```
